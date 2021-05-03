@@ -1,0 +1,5 @@
+User-agent: *
+Disallow: /add
+Disallow: /login
+Disallow: /conteudo
+Disallow: /painel

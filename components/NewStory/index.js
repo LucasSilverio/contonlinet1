@@ -1,0 +1,248 @@
+import React, { Component } from 'react';
+import Cookie from 'js-cookie';
+import Link from 'next/link';
+import Router from 'next/router';
+import Loader from 'react-loader-spinner';
+import osAPI from '../../services/osAPI';
+import { post } from 'axios';
+import dynamic from 'next/dynamic';
+import { EditorState, convertToRaw } from 'draft-js';
+// import draftToHtml from 'draftjs-to-html';
+// import { Editor } from 'react-draft-wysiwyg';
+import 'react-draft-wysiwyg/dist/react-draft-wysiwyg.css';
+import { 
+  Btn,
+  BtnAction,
+  Container, 
+  Conteudo,
+  Ipt,
+  ImagensArea,
+  Label,
+  Selector,
+  PageContainer,
+  UploadedImage
+} from './styled';
+import PanelNavigation from '../PanelNavigation';
+import { FirstColor, SecondColor, ThirdColor } from '../MainStyled';
+import { SubTitulo, Titulo } from '../Principal/styled';
+import NumberFormat from 'react-number-format'; 
+import ecommerceAPI from '../../services/ecommerceAPI'; 
+
+const importJodit = () => import('jodit-react');
+
+const JoditEditor = dynamic(importJodit, {
+    ssr: false,
+});
+
+const config = {
+    readonly: false, // all options from https://xdsoft.net/jodit/doc/
+    uploader: {
+      url: ecommerceAPI.BASE_URL_API+'blog/upload' ,
+      isSuccess: function (resp) {
+        //this step is necessary for whatever reason, otherwise it will throw an error.
+            return resp;
+        },
+      process: function(resp){
+          //this was an important step to align the json with what jodit expects.
+          return {
+              files: resp.images,
+              path: resp.path,
+              baseurl: resp.path,
+              error: resp.error,
+              message: resp.message
+          }
+      }
+    },
+}
+
+class NewStory extends Component {
+
+  constructor(props){
+    super(props);
+    this.state={
+        loading:false,
+        ready: false,
+        editorState: EditorState.createEmpty(),
+        titulo:'',
+        previa:'',
+        autor:'',
+        selectedFileImg:'',
+        filenameImg:'',
+        filename:'',
+        content:'',
+        senderContent:'',
+        editor:null,
+        imagens:[]
+    }
+    this.fileSelectedHandler = this.fileSelectedHandler.bind(this);
+    this.fileSelectedHandlerImg = this.fileSelectedHandlerImg.bind(this);
+    this.handleImages = this.handleImages.bind(this);
+    this.getInfos = this.getInfos.bind(this);
+    this.submit = this.submit.bind(this)
+  }
+
+  componentDidMount(){
+    
+  }
+
+  onEditorStateChange = (editorState) => {
+    this.setState({
+      editorState,
+    });
+  };
+
+  uploadImageCallBack(file) {
+    return new Promise(
+        (resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            xhr.open('POST', ecommerceAPI.BASE_URL_API+'blog/upload');
+            // xhr.setRequestHeader('Authorization', 'Client-ID XXXXX');
+            const data = new FormData();
+            data.append('jwt', Cookie.get('token'));
+            data.append('file', file);
+            data.file = file;
+            xhr.send(data);
+            xhr.addEventListener('load', () => {
+                const response = JSON.parse(xhr.responseText);
+                // console.log(response.url);
+                resolve({
+                  data: {
+                    link: response.url
+                  }
+                })
+            });
+            xhr.addEventListener('error', () => {
+                const error = JSON.parse(xhr.responseText);
+                reject(error);
+            });
+        }
+    );
+  }
+
+  fileSelectedHandler(e){
+    if(e.target.files[0].size >= 102400){
+        this.setState({selectedFile:e.target.files[0]})
+        this.setState({filename:e.target.files[0].name});
+    }
+  }
+
+  fileSelectedHandlerImg(e){
+    if(e.target.files[0].size >= 1000){
+        this.setState({selectedFileImg:e.target.files[0]})
+        this.setState({filenameImg:e.target.files[0].name});
+    }
+  }
+
+  getInfos(){
+    osAPI.getPanelInfos(Cookie.get('tk'))
+    .then(r=>r.json())
+    .then(json=>{
+      if(json.success){
+        this.setState({nomeloja:json.data.nomeloja})
+        this.setState({nome:json.data.nome})
+      }
+    })
+  }
+
+  handleInfos(){
+    Router.push('/panel/infos');
+  }
+
+  handleContent(e){
+    this.setState({senderContent:e})
+    // console.log(e)
+  }
+
+  handleImages(e){
+    e.preventDefault();
+    const fd = new FormData();
+    fd.append('jwt', Cookie.get('tk'));
+    fd.append('files', this.state.selectedFileImg);
+    const config = {
+        headers: {
+            'Content-Type': 'multipart/form-data',
+        }
+    }
+    post(ecommerceAPI.BASE_URL_API+'blog/upload', fd,config)
+    .then(res => {
+      console.log(res)
+      if(res.data.success){
+        let a = this.state.imagens;
+        a.push(res.data.path);
+        this.setState({imagens:a})
+      }
+    })
+  }
+
+  submit(e){
+    e.preventDefault();
+    const fd = new FormData();
+    fd.append('jwt', Cookie.get('tk'));
+    fd.append('autor', this.state.autor);
+    fd.append('titulo', this.state.titulo);
+    fd.append('conteudo', this.state.senderContent);
+    fd.append('previa', this.state.previa);
+    fd.append('file', this.state.selectedFile);
+    const config = {
+        headers: {
+            'Content-Type': 'multipart/form-data',
+        }
+    }
+    post(ecommerceAPI.BASE_URL_API+'blog/newPost', fd,config)
+    .then(res => {
+      // if(res.data.success){
+      //   Router.push('/painel/blog');
+      // }
+    })
+  }
+
+  render(){ 
+    const { editorState } = this.state;
+    console.log(this.state.imagens)
+    return(
+        <PageContainer bgColor={ThirdColor}>
+            <PanelNavigation
+              dest='/admin'
+            />
+            <Container> 
+              <Btn>[+] Imagens</Btn>
+              <ImagensArea>
+                <form onSubmit={this.handleImages}>
+                  <p>Gere o link das imagens que deseja incluir na sua matéria realizando o upload aqui.</p>
+                  <Ipt type='file' onChange={this.fileSelectedHandlerImg} />
+                  <BtnAction>Enviar Imagem</BtnAction>
+                </form>
+                {this.state.imagens.map((i, index) => (
+                  <UploadedImage key={index}>{i}</UploadedImage>
+                ))}
+              </ImagensArea>
+              <form onSubmit={this.submit}>
+                <Label>Título da matéria</Label>
+                <Ipt type='text' value={this.state.titulo} onChange={e=>this.setState({titulo:e.target.value})} />
+                <Label>Prévia</Label>
+                <Ipt type='text' value={this.state.previa} onChange={e=>this.setState({previa:e.target.value})} />
+                <Label>Autor</Label>
+                <Selector onChange={e=>this.setState({autor:e.target.value})}>
+                  <option value='' disabled selected>Selecione</option>
+                  <option value='1' >Lucas</option>
+                </Selector>
+                <Label>Imagem da capa</Label>
+                <Ipt type='file' onChange={this.fileSelectedHandler} />
+                <JoditEditor
+                  ref={this.state.editor}
+                  value={this.state.content}
+                  config={config}
+                  tabIndex={1} // tabIndex of textarea
+                  onBlur={newContent => {}} // preferred to use only this option to update the content for performance reasons
+                  onChange={newContent => this.handleContent(newContent)}
+                />
+
+                <BtnAction>Salvar</BtnAction>
+              </form>
+            </Container>
+        </PageContainer>
+    )
+  }
+}
+
+export default NewStory;
